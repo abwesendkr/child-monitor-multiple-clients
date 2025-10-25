@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with Child Monitor. If not, see <http://www.gnu.org/licenses/>.
  */
-package de.rochefort.childmonitor
+package com.example.childmonitor_multiple
 
 import android.app.Activity
 import android.content.ComponentName
@@ -28,7 +28,7 @@ import android.util.Log
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
-import de.rochefort.childmonitor.MonitorService.MonitorBinder
+import com.example.childmonitor_multiple.MonitorService.MonitorBinder
 
 class MonitorActivity : Activity() {
     private val connection: ServiceConnection = object : ServiceConnection {

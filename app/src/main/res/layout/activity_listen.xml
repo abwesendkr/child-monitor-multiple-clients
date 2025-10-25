@@ -9,7 +9,7 @@
     android:paddingTop="@dimen/activity_vertical_margin"
     android:paddingRight="@dimen/activity_horizontal_margin"
     android:paddingBottom="@dimen/activity_vertical_margin"
-    tools:context="de.rochefort.childmonitor.MonitorActivity">
+    tools:context="com.example.childmonitor_multiple.MonitorActivity">
 
     <TextView
         android:id="@id/parentDeviceTitle"
@@ -59,7 +59,7 @@
         android:layout_width="match_parent"
         android:layout_height="15dip" />
 
-    <de.rochefort.childmonitor.VolumeView
+    <com.example.childmonitor_multiple.VolumeView
         android:id="@+id/volume"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />

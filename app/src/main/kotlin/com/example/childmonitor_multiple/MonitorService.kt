@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with Child Monitor. If not, see <http://www.gnu.org/licenses/>.
  */
-package de.rochefort.childmonitor
+package com.example.childmonitor_multiple
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -62,11 +62,11 @@ class MonitorService : Service() {
         val bufferSize = AudioRecord.getMinBufferSize(frequency, channelConfiguration, audioEncoding)
         val audioRecord: AudioRecord = try {
             AudioRecord(
-                    MediaRecorder.AudioSource.MIC,
-                    frequency,
-                    channelConfiguration,
-                    audioEncoding,
-                    bufferSize
+                MediaRecorder.AudioSource.MIC,
+                frequency,
+                channelConfiguration,
+                audioEncoding,
+                bufferSize
             )
         } catch (e: SecurityException) {
             // This should never happen, we asked for permission before
@@ -91,6 +91,64 @@ class MonitorService : Service() {
             audioRecord.stop()
         }
     }
+    private fun handleMultiClientStreaming(serverSocket: ServerSocket, clients: MutableList<Socket>) {
+        val frequency: Int = AudioCodecDefines.FREQUENCY
+        val channelConfiguration: Int = AudioCodecDefines.CHANNEL_CONFIGURATION_IN
+        val audioEncoding: Int = AudioCodecDefines.ENCODING
+        val bufferSize = AudioRecord.getMinBufferSize(frequency, channelConfiguration, audioEncoding)
+
+        val audioRecord = AudioRecord(
+            MediaRecorder.AudioSource.MIC,
+            frequency,
+            channelConfiguration,
+            audioEncoding,
+            bufferSize
+        )
+
+        val pcmBufferSize = bufferSize * 2
+        val pcmBuffer = ShortArray(pcmBufferSize)
+        val ulawBuffer = ByteArray(pcmBufferSize)
+
+        try {
+            audioRecord.startRecording()
+            Log.i(TAG, "Mehrere Clients aktiv – Aufnahme gestartet.")
+
+            while (!Thread.currentThread().isInterrupted && !serverSocket.isClosed) {
+                val read = audioRecord.read(pcmBuffer, 0, bufferSize)
+                if (read > 0) {
+                    val encoded: Int = AudioCodecDefines.CODEC.encode(pcmBuffer, read, ulawBuffer, 0)
+
+                    synchronized(clients) {
+                        val iterator = clients.iterator()
+                        while (iterator.hasNext()) {
+                            val client = iterator.next()
+                            try {
+                                val out = client.getOutputStream()
+                                out.write(ulawBuffer, 0, encoded)
+                            } catch (e: IOException) {
+                                try { client.close() } catch (ignored: IOException) {}
+                                iterator.remove()
+                                Log.w(TAG, "Client getrennt: ${client.inetAddress}")
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Streaming-Fehler", e)
+        } finally {
+            audioRecord.stop()
+            audioRecord.release()
+            synchronized(clients) {
+                clients.forEach {
+                    try { it.close() } catch (_: IOException) {}
+                }
+                clients.clear()
+            }
+            Log.i(TAG, "Audioaufnahme beendet, alle Clients getrennt.")
+        }
+    }
+
 
     override fun onCreate() {
         Log.i(TAG, "ChildMonitor start")
@@ -130,15 +188,25 @@ class MonitorService : Service() {
                         // Register the service so that parent devices can
                         // locate the child device
                         registerService(localPort)
-                        serverSocket.accept().use { socket ->
-                            Log.i(TAG, "Connection from parent device received")
+                        val clients = mutableListOf<Socket>()
 
-                            // We now have a client connection.
-                            // Unregister so no other clients will
-                            // attempt to connect
-                            unregisterService()
-                            serviceConnection(socket)
-                        }
+// Thread zum Akzeptieren neuer Clients
+                        Thread {
+                            try {
+                                while (!Thread.currentThread().isInterrupted) {
+                                    val client = serverSocket.accept()
+                                    client.tcpNoDelay = true
+                                    synchronized(clients) { clients.add(client) }
+                                    Log.i(TAG, "Neuer Client verbunden: ${client.inetAddress}")
+                                }
+                            } catch (e: IOException) {
+                                Log.e(TAG, "Client-Akzeptierungsfehler: ${e.message}")
+                            }
+                        }.start()
+
+// Aufnahme und Verteilung starten
+                        handleMultiClientStreaming(serverSocket, clients)
+
                     }
                 } catch (e: Exception) {
                     if (this.connectionToken == currentToken) {
@@ -195,7 +263,7 @@ class MonitorService : Service() {
             }
         }
         nsdManager.registerService(
-                serviceInfo, NsdManager.PROTOCOL_DNS_SD, registrationListener)
+            serviceInfo, NsdManager.PROTOCOL_DNS_SD, registrationListener)
     }
 
     private fun unregisterService() {
@@ -209,9 +277,9 @@ class MonitorService : Service() {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val serviceChannel = NotificationChannel(
-                    CHANNEL_ID,
-                    "Foreground Service Channel",
-                    NotificationManager.IMPORTANCE_DEFAULT
+                CHANNEL_ID,
+                "Foreground Service Channel",
+                NotificationManager.IMPORTANCE_DEFAULT
             )
             this.notificationManager.createNotificationChannel(serviceChannel)
         }
@@ -222,9 +290,9 @@ class MonitorService : Service() {
         // Set the info for the views that show in the notification panel.
         val b = NotificationCompat.Builder(this, CHANNEL_ID)
         b.setSmallIcon(R.drawable.listening_notification) // the status icon
-                .setOngoing(true)
-                .setTicker(text) // the status text
-                .setContentTitle(text) // the label of the entry
+            .setOngoing(true)
+            .setTicker(text) // the status text
+            .setContentTitle(text) // the label of the entry
         return b.build()
     }
 

@@ -14,10 +14,9 @@
  * You should have received a copy of the GNU General Public License
  * along with Child Monitor. If not, see <http://www.gnu.org/licenses/>.
  */
-package de.rochefort.childmonitor
+package com.example.childmonitor_multiple
 
 import android.media.AudioFormat
-import de.rochefort.childmonitor.audio.G711UCodec
 
 object AudioCodecDefines {
     const val FREQUENCY = 8000

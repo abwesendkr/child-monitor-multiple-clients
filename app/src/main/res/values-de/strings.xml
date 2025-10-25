@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <string name="app_name">Child Monitor</string>
+    <string name="app_name">Child Monitor Multiple Clients</string>
     <string name="action_settings">Einstellungen</string>
     <string name="useAsParentDevice">Als Eltern-Gerät benutzen</string>
     <string name="useAsChildDevice">Als Kind-Gerät benutzen</string>
