@@ -49,6 +49,9 @@ class ListenService : Service() {
     var childDeviceName: String? = null
         private set
 
+    var onError: (() -> Unit)? = null
+    var onUpdate: (() -> Unit)? = null
+
     override fun onCreate() {
         super.onCreate()
         this.notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
@@ -62,11 +65,12 @@ class ListenService : Service() {
             val name = it.getString("name")
             childDeviceName = name
             val n = buildNotification(name)
-            val foregroundServiceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0 // Keep the linter happy
+            val foregroundServiceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0
             ServiceCompat.startForeground(this, ID, n, foregroundServiceType)
             val address = it.getString("address")
             val port = it.getInt("port")
-            doListen(address, port)
+            doListenWithRetries(address, port)
         }
         return START_REDELIVER_INTENT
     }
@@ -82,61 +86,76 @@ class ListenService : Service() {
         Toast.makeText(this, R.string.stopped, Toast.LENGTH_SHORT).show()
     }
 
-    override fun onBind(intent: Intent): IBinder {
-        return binder
-    }
-
-    private fun buildNotification(name: String?): Notification {
-        // In this sample, we'll use the same text for the ticker and the expanded notification
-        val text = getText(R.string.listening)
-
-        // The PendingIntent to launch our activity if the user selects this notification
-        val contentIntent = PendingIntent.getActivity(this, 0,
-                Intent(this, ListenActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
-
-        // Set the info for the views that show in the notification panel.
-        val b = NotificationCompat.Builder(this, CHANNEL_ID)
-        b.setSmallIcon(R.drawable.listening_notification) // the status icon
-                .setOngoing(true)
-                .setTicker(text) // the status text
-                .setContentTitle(text) // the label of the entry
-                .setContentText(name) // the contents of the entry
-                .setContentIntent(contentIntent)
-        return b.build()
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val serviceChannel = NotificationChannel(
-                    CHANNEL_ID,
-                    "Foreground Service Channel",
-                    NotificationManager.IMPORTANCE_DEFAULT
-            )
-            notificationManager.createNotificationChannel(serviceChannel)
-        }
-    }
+    override fun onBind(intent: Intent): IBinder = binder
 
     inner class ListenBinder : Binder() {
         val service: ListenService
             get() = this@ListenService
     }
 
-    var onError: (() -> Unit)? = null
-    var onUpdate: (() -> Unit)? = null
-    private fun doListen(address: String?, port: Int) {
+    private fun buildNotification(name: String?): Notification {
+        // In this sample, we'll use the same text for the ticker and the expanded notification
+        val text = getText(R.string.listening)
+        val contentIntent = PendingIntent.getActivity(
+            this, 0,
+            Intent(this, ListenActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE
+        )
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.listening_notification)
+            .setOngoing(true)
+            .setTicker(text)
+            .setContentTitle(text)
+            .setContentText(name)
+            .setContentIntent(contentIntent)
+            .build()
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val serviceChannel = NotificationChannel(
+                CHANNEL_ID,
+                "Foreground Service Channel",
+                NotificationManager.IMPORTANCE_DEFAULT
+            )
+            notificationManager.createNotificationChannel(serviceChannel)
+        }
+    }
+
+    /** Neuer Wrapper mit 3 automatischen Reconnect-Versuchen **/
+    private fun doListenWithRetries(address: String?, port: Int) {
         val lt = Thread {
-            try {
-                val socket = Socket(address, port)
-                socket.soTimeout = 30_000
-                val success = streamAudio(socket)
-                if (!success) {
-                    playAlert()
-                    onError?.invoke()
+            var attempts = 0
+            var connected = false
+
+            while (attempts < 3 && !connected && !Thread.currentThread().isInterrupted) {
+                try {
+                    Log.i(TAG, "Verbindungsversuch ${attempts + 1} zu $address:$port …")
+                    val socket = Socket(address, port)
+                    socket.soTimeout = 30_000
+                    connected = streamAudio(socket)
+                    if (!connected) {
+                        Log.w(TAG, "Streaming fehlgeschlagen, Versuch ${attempts + 1}")
+                        playAlert()
+                        attempts++
+                        Thread.sleep(2000)
+                    }
+                } catch (e: IOException) {
+                    attempts++
+                    Log.e(TAG, "Fehler beim Verbindungsaufbau (Versuch $attempts von 3)", e)
+                    if (attempts < 3) Thread.sleep(2000)
                 }
-            } catch (e : IOException) {
-                Log.e(TAG, "Error opening socket to $address on port $port", e)
+            }
+
+            if (!connected) {
+                Log.e(TAG, "Nach 3 Versuchen keine Verbindung möglich.")
+                playAlert()
+                onError?.invoke()
+            } else {
+                Log.i(TAG, "Verbindung erfolgreich aufgebaut.")
             }
         }
+
         this.listenThread = lt
         lt.start()
     }
@@ -148,10 +167,12 @@ class ListenService : Service() {
             channelConfiguration,
             audioEncoding,
             bufferSize,
-            AudioTrack.MODE_STREAM)
+            AudioTrack.MODE_STREAM
+        )
+
         try {
             audioTrack.play()
-        } catch (e : java.lang.IllegalStateException) {
+        } catch (e: IllegalStateException) {
             Log.e(TAG, "Failed to play streamed audio audio for other reason", e)
             return false
         }
@@ -165,14 +186,12 @@ class ListenService : Service() {
 
         val readBuffer = ByteArray(byteBufferSize)
         val decodedBuffer = ShortArray(byteBufferSize * 2)
-        try {
+
+        return try {
             while (!Thread.currentThread().isInterrupted) {
                 val len = inputStream.read(readBuffer)
-                if (len < 0) {
-                    // If the current thread was not interrupted this means the remote stopped streaming
-                    return Thread.currentThread().isInterrupted
-                }
-                val decoded: Int = AudioCodecDefines.CODEC.decode(decodedBuffer, readBuffer, len, 0)
+                if (len < 0) return false
+                val decoded = AudioCodecDefines.CODEC.decode(decodedBuffer, readBuffer, len, 0)
                 if (decoded > 0) {
                     audioTrack.write(decodedBuffer, 0, decoded)
                     val decodedBytes = ShortArray(decoded)
@@ -181,13 +200,16 @@ class ListenService : Service() {
                     onUpdate?.invoke()
                 }
             }
-            return true
+            true
         } catch (e: Exception) {
-            Log.e(TAG, "Connection failed", e)
-            return false
+            Log.e(TAG, "Verbindungsfehler im Stream", e)
+            false
         } finally {
-            audioTrack.stop()
-            socket.close()
+            try {
+                audioTrack.stop()
+                audioTrack.release()
+                socket.close()
+            } catch (_: Exception) {}
         }
     }
 
@@ -195,7 +217,7 @@ class ListenService : Service() {
         val mp = MediaPlayer.create(this, R.raw.upward_beep_chromatic_fifths)
         if (mp != null) {
             Log.i(TAG, "Playing alert")
-            mp.setOnCompletionListener { obj: MediaPlayer -> obj.release() }
+            mp.setOnCompletionListener { it.release() }
             mp.start()
         } else {
             Log.e(TAG, "Failed to play alert")
