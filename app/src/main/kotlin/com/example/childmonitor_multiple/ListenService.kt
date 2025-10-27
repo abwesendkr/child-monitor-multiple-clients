@@ -65,9 +65,11 @@ class ListenService : Service() {
             val name = it.getString("name")
             childDeviceName = name
             val n = buildNotification(name)
-            val foregroundServiceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0
+            val foregroundServiceType =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0
             ServiceCompat.startForeground(this, ID, n, foregroundServiceType)
+
             val address = it.getString("address")
             val port = it.getInt("port")
             doListenWithRetries(address, port)
@@ -122,7 +124,7 @@ class ListenService : Service() {
         }
     }
 
-    /** Neuer Wrapper mit 3 automatischen Reconnect-Versuchen **/
+    /** New logic: automatically retry connection up to 3 times **/
     private fun doListenWithRetries(address: String?, port: Int) {
         val lt = Thread {
             var attempts = 0
@@ -130,29 +132,28 @@ class ListenService : Service() {
 
             while (attempts < 3 && !connected && !Thread.currentThread().isInterrupted) {
                 try {
-                    Log.i(TAG, "Verbindungsversuch ${attempts + 1} zu $address:$port …")
+                    Log.i(TAG, "Connection attempt ${attempts + 1} to $address:$port ...")
                     val socket = Socket(address, port)
                     socket.soTimeout = 30_000
                     connected = streamAudio(socket)
                     if (!connected) {
-                        Log.w(TAG, "Streaming fehlgeschlagen, Versuch ${attempts + 1}")
-                        playAlert()
+                        Log.w(TAG, "Streaming failed, attempt ${attempts + 1}")
                         attempts++
                         Thread.sleep(2000)
                     }
                 } catch (e: IOException) {
                     attempts++
-                    Log.e(TAG, "Fehler beim Verbindungsaufbau (Versuch $attempts von 3)", e)
+                    Log.e(TAG, "Error while connecting (attempt $attempts of 3)", e)
                     if (attempts < 3) Thread.sleep(2000)
                 }
             }
 
             if (!connected) {
-                Log.e(TAG, "Nach 3 Versuchen keine Verbindung möglich.")
+                Log.e(TAG, "Failed to connect after 3 attempts.")
                 playAlert()
                 onError?.invoke()
             } else {
-                Log.i(TAG, "Verbindung erfolgreich aufgebaut.")
+                Log.i(TAG, "Connection established successfully.")
             }
         }
 
@@ -161,8 +162,9 @@ class ListenService : Service() {
     }
 
     private fun streamAudio(socket: Socket): Boolean {
-        Log.i(TAG, "Setting up stream")
-        val audioTrack = AudioTrack(AudioManager.STREAM_MUSIC,
+        Log.i(TAG, "Starting audio stream")
+        val audioTrack = AudioTrack(
+            AudioManager.STREAM_MUSIC,
             frequency,
             channelConfiguration,
             audioEncoding,
@@ -173,14 +175,14 @@ class ListenService : Service() {
         try {
             audioTrack.play()
         } catch (e: IllegalStateException) {
-            Log.e(TAG, "Failed to play streamed audio audio for other reason", e)
+            Log.e(TAG, "Failed to start AudioTrack", e)
             return false
         }
 
         val inputStream = try {
             socket.getInputStream()
         } catch (e: IOException) {
-            Log.e(TAG, "Failed to read audio audio for socket", e)
+            Log.e(TAG, "Failed to open input stream", e)
             return false
         }
 
@@ -202,7 +204,7 @@ class ListenService : Service() {
             }
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Verbindungsfehler im Stream", e)
+            Log.e(TAG, "Connection lost during streaming", e)
             false
         } finally {
             try {
@@ -216,11 +218,11 @@ class ListenService : Service() {
     private fun playAlert() {
         val mp = MediaPlayer.create(this, R.raw.upward_beep_chromatic_fifths)
         if (mp != null) {
-            Log.i(TAG, "Playing alert")
+            Log.i(TAG, "Playing alert sound")
             mp.setOnCompletionListener { it.release() }
             mp.start()
         } else {
-            Log.e(TAG, "Failed to play alert")
+            Log.e(TAG, "Failed to play alert sound")
         }
     }
 

@@ -37,6 +37,8 @@ class ListenActivity : Activity() {
             volumeView.volumeHistory = bs.volumeHistory
             bs.onUpdate = { volumeView.postInvalidate() }
             bs.onError = { postErrorMessage() }
+
+            statusText.text = "Connected and listening..."
         }
 
         override fun onServiceDisconnected(className: ComponentName) {
@@ -44,8 +46,8 @@ class ListenActivity : Activity() {
             // unexpectedly disconnected -- that is, its process crashed.
             // Because it is running in our same process, we should never
             // see this happen.
-            Toast.makeText(this@ListenActivity, R.string.disconnected,
-                    Toast.LENGTH_SHORT).show()
+            Toast.makeText(this@ListenActivity, R.string.disconnected, Toast.LENGTH_SHORT).show()
+            statusText.text = "Disconnected"
         }
     }
 
@@ -65,10 +67,10 @@ class ListenActivity : Activity() {
         // applications).
         if (bindService(intent, connection, BIND_AUTO_CREATE)) {
             shouldUnbind = true
-            Log.i(TAG, "Bound listen service")
+            Log.i(TAG, "Bound to ListenService")
         } else {
-            Log.e(TAG, "Error: The requested service doesn't " +
-                    "exist, or this client isn't allowed access to it.")
+            Log.e(TAG, "Error: Could not bind to ListenService.")
+            statusText.text = "Failed to bind service."
         }
     }
 
@@ -82,7 +84,7 @@ class ListenActivity : Activity() {
 
     fun postErrorMessage() {
         statusText.post {
-            statusText.text = "Verbindung getrennt (3 Fehlversuche)"
+            statusText.text = "Connection failed after 3 attempts."
         }
     }
 
@@ -90,7 +92,7 @@ class ListenActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_listen)
         statusText = findViewById(R.id.textStatus)
-        statusText.text = "Starte Verbindung…"
+        statusText.text = "Attempting to connect..."
         volumeControlStream = AudioManager.STREAM_MUSIC
         ensureServiceRunningAndBind(intent.extras)
     }
