@@ -95,9 +95,9 @@ class ListenService : Service() {
             get() = this@ListenService
     }
 
-    private fun buildNotification(name: String?): Notification {
+    private fun buildNotification(name: String?, status: String = getString(R.string.listening)): Notification {
         // In this sample, we'll use the same text for the ticker and the expanded notification
-        val text = getText(R.string.listening)
+        val text = status
         val contentIntent = PendingIntent.getActivity(
             this, 0,
             Intent(this, ListenActivity::class.java),
@@ -151,6 +151,7 @@ class ListenService : Service() {
             if (!connected) {
                 Log.e(TAG, "Failed to connect after 3 attempts.")
                 playAlert()
+                updateNotification(getString(R.string.disconnected))
                 onError?.invoke()
             } else {
                 Log.i(TAG, "Connection established successfully.")
@@ -205,6 +206,9 @@ class ListenService : Service() {
             true
         } catch (e: Exception) {
             Log.e(TAG, "Connection lost during streaming", e)
+            updateNotification(getString(R.string.disconnected))
+            playAlert()
+            onError?.invoke()
             false
         } finally {
             try {
@@ -213,6 +217,11 @@ class ListenService : Service() {
                 socket.close()
             } catch (_: Exception) {}
         }
+    }
+
+    private fun updateNotification(status: String) {
+        val n = buildNotification(childDeviceName, status)
+        notificationManager.notify(ID, n)
     }
 
     private fun playAlert() {
