@@ -8,7 +8,7 @@
     android:paddingLeft="@dimen/activity_horizontal_margin"
     android:paddingRight="@dimen/activity_horizontal_margin"
     android:paddingTop="@dimen/activity_vertical_margin"
-    tools:context="com.example.childmonitor_multiple.MonitorActivity" >
+    tools:context="com.example.childmonitor_multiple.MonitorActivity">
 
     <TextView
         android:id="@+id/parentDeviceTitle"
@@ -67,7 +67,26 @@
         android:inputType="number"
         android:maxLength="5"
         android:hint="@string/examplePort"
-        android:nextFocusForward="@+id/connectViaAddressButton"/>
+        android:nextFocusForward="@+id/retryField" />
+
+    <TextView
+        android:id="@+id/retryTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="20sp"
+        android:text="Retry attempts" />
+
+    <EditText
+        android:id="@+id/retryField"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="20sp"
+        android:ems="10"
+        android:inputType="number"
+        android:maxLength="2"
+        android:text="3"
+        android:hint="Default: 3"
+        android:nextFocusForward="@+id/connectViaAddressButton" />
 
     <Space
         android:layout_width="match_parent"
