@@ -1,0 +1,16 @@
+Categories:
+  - Productivity
+License: GPL-3.0-or-later
+AuthorName: Ben
+SourceCode: https://github.com/abwesendkr/child-monitor-multiple-clients
+IssueTracker: https://github.com/abwesendkr/child-monitor-multiple-clients/issues
+Changelog: https://github.com/abwesendkr/child-monitor-multiple-clients/releases
+AutoName: child-monitor-multiple-clients
+RepoType: git
+Repo: https://github.com/abwesendkr/child-monitor-multiple-clients.git
+Builds:
+  - versionName: 1.5
+    versionCode: 1
+    commit: v1.0
+    gradle:
+      - yes
